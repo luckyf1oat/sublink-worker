@@ -146,4 +146,31 @@ describe('SS Plugin Issue #290', () => {
     expect(proxy['plugin-opts'].path).toBe('/v2ray');
     expect(proxy['plugin-opts'].tls).toBe(true);  // Boolean flag without value
   });
+
+  it('should normalize v2ray-plugin mux from 0 to false', async () => {
+    const input = `proxies:
+  - name: 看片专用2
+    type: ss
+    server: animal.nuaa.tech
+    port: 80
+    cipher: aes-128-gcm
+    password: '666'
+    udp: true
+    plugin: v2ray-plugin
+    plugin-opts:
+      mode: websocket
+      host: edcloudwasm.nellewizaijn.workers.dev
+      path: ''
+      mux: '0'`;
+
+    const builder = new ClashConfigBuilder(input, 'minimal', [], null, 'zh-CN', 'test-agent');
+    const yamlText = await builder.build();
+    const built = yaml.load(yamlText);
+    const proxy = built.proxies.find(p => p.name === '看片专用2');
+
+    expect(proxy).toBeDefined();
+    expect(proxy.plugin).toBe('v2ray-plugin');
+    expect(proxy['plugin-opts']).toBeDefined();
+    expect(proxy['plugin-opts'].mux).toBe(false);
+  });
 });

@@ -114,4 +114,41 @@ proxy-groups:
         expect(text).toBeTruthy();
         expect(kvMock.put).toHaveBeenCalled();
     });
+
+    it('GET /a/:code redirects to /auto query', async () => {
+        const kvMock = {
+            put: vi.fn(async () => {}),
+            get: vi.fn(async (key) => {
+                if (key === 'abc123') {
+                    return '?config=vmess%3A%2F%2Ftest';
+                }
+                return null;
+            }),
+            delete: vi.fn(async () => {})
+        };
+        const app = createTestApp({ kv: kvMock });
+        const res = await app.request('http://localhost/a/abc123', { redirect: 'manual' });
+
+        expect(res.status).toBe(302);
+        expect(res.headers.get('location')).toBe('http://localhost/auto?config=vmess%3A%2F%2Ftest');
+    });
+
+    it('GET /resolve resolves /a/:code to /auto URL', async () => {
+        const kvMock = {
+            put: vi.fn(async () => {}),
+            get: vi.fn(async (key) => {
+                if (key === 'auto001') {
+                    return '?config=vmess%3A%2F%2Fdemo';
+                }
+                return null;
+            }),
+            delete: vi.fn(async () => {})
+        };
+        const app = createTestApp({ kv: kvMock });
+        const res = await app.request('http://localhost/resolve?url=http%3A%2F%2Flocalhost%2Fa%2Fauto001');
+
+        expect(res.status).toBe(200);
+        const data = await res.json();
+        expect(data).toEqual({ originalUrl: 'http://localhost/auto?config=vmess%3A%2F%2Fdemo' });
+    });
 });

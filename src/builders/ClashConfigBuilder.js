@@ -47,6 +47,35 @@ function getClashUdpValue(proxy, defaultEnabled = true) {
     return defaultEnabled;
 }
 
+function normalizePluginOpts(pluginOpts) {
+    if (!pluginOpts || typeof pluginOpts !== 'object') {
+        return pluginOpts;
+    }
+
+    const normalizeBoolLike = (value) => {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'number') {
+            if (value === 0) return false;
+            if (value === 1) return true;
+            return value;
+        }
+        if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase();
+            if (normalized === '0' || normalized === 'false' || normalized === 'no') return false;
+            if (normalized === '1' || normalized === 'true' || normalized === 'yes') return true;
+        }
+        return value;
+    };
+
+    const normalized = { ...pluginOpts };
+    ['mux', 'tls'].forEach((key) => {
+        if (typeof normalized[key] !== 'undefined') {
+            normalized[key] = normalizeBoolLike(normalized[key]);
+        }
+    });
+    return normalized;
+}
+
 export class ClashConfigBuilder extends BaseConfigBuilder {
     constructor(inputString, selectedRules, customRules, baseConfig, lang, userAgent, groupByCountry = false, enableClashUI = false, externalController, externalUiDownloadUrl, includeAutoSelect = true) {
         if (!baseConfig) {
@@ -140,7 +169,7 @@ export class ClashConfigBuilder extends BaseConfigBuilder {
                     password: proxy.password,
                     udp: getClashUdpValue(proxy),
                     ...(proxy.plugin ? { plugin: proxy.plugin } : {}),
-                    ...(proxy.plugin_opts ? { 'plugin-opts': proxy.plugin_opts } : {})
+                    ...(proxy.plugin_opts ? { 'plugin-opts': normalizePluginOpts(proxy.plugin_opts) } : {})
                 };
             case 'vmess':
                 return {

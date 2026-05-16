@@ -7,6 +7,7 @@ import { ValidatedTextarea } from './ValidatedTextarea.jsx';
 import { formLogicFn } from './formLogic.js';
 
 const LINK_FIELDS = [
+  { key: 'auto', labelKey: 'autoLink' },
   { key: 'xray', labelKey: 'xrayLink' },
   { key: 'singbox', labelKey: 'singboxLink' },
   { key: 'clash', labelKey: 'clashLink' },
