@@ -74,6 +74,17 @@ describe('GET /auto', () => {
         expect(text).toMatch(/^[A-Za-z0-9+/=]+$/);
     });
 
+    it('detects karing as singbox and returns JSON config', async () => {
+        const app = createTestApp();
+        const res = await app.request(`http://localhost/auto?config=${encodeURIComponent(VMESS_SAMPLE)}`, {
+            headers: { 'User-Agent': 'Karing/1.0.0 (sing-box 1.12.0)' }
+        });
+
+        expect(res.status).toBe(200);
+        expect(res.headers.get('x-sublink-detected-client')).toBe('singbox');
+        expect(res.headers.get('content-type')).toContain('application/json');
+    });
+
     it('falls back to clash when user-agent is unknown', async () => {
         const app = createTestApp();
         const res = await app.request(`http://localhost/auto?config=${encodeURIComponent(VMESS_SAMPLE)}`, {

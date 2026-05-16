@@ -684,11 +684,26 @@ function detectSubscriptionClient(userAgent) {
         return 'clash';
     }
 
-    if (ua.includes('sing-box') || ua.includes('singbox')) {
+    if (
+        ua.includes('sing-box') ||
+        ua.includes('singbox') ||
+        ua.includes('sfa/') ||
+        ua.includes('sfi/') ||
+        ua.includes('karing') ||
+        ua.includes('hiddify') ||
+        ua.includes('nekoray')
+    ) {
         return 'singbox';
     }
 
-    if (ua.includes('mihomo') || ua.includes('clash') || ua.includes('meta')) {
+    if (
+        ua.includes('mihomo') ||
+        ua.includes('clash') ||
+        ua.includes('meta') ||
+        ua.includes('clash-verge') ||
+        ua.includes('clashx') ||
+        ua.includes('stash')
+    ) {
         return 'clash';
     }
 
@@ -696,7 +711,7 @@ function detectSubscriptionClient(userAgent) {
         return 'surge';
     }
 
-    if (ua.includes('xray') || ua.includes('v2ray') || ua.includes('nekobox') || ua.includes('nekoray')) {
+    if (ua.includes('xray') || ua.includes('v2ray') || ua.includes('v2rayng') || ua.includes('nekobox')) {
         return 'xray';
     }
 

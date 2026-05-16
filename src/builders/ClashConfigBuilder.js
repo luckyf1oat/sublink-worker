@@ -40,11 +40,16 @@ function supportsMrsFormat(userAgent) {
     return true;
 }
 
-function getClashUdpValue(proxy, defaultEnabled = true) {
+function getClashUdpValue(proxy) {
     if (typeof proxy?.udp !== 'undefined') {
         return proxy.udp;
     }
-    return defaultEnabled;
+    return undefined;
+}
+
+function getUdpField(proxy) {
+    const udp = getClashUdpValue(proxy);
+    return typeof udp !== 'undefined' ? { udp } : {};
 }
 
 function normalizePluginOpts(pluginOpts) {
@@ -167,7 +172,7 @@ export class ClashConfigBuilder extends BaseConfigBuilder {
                     port: proxy.server_port,
                     cipher: proxy.method,
                     password: proxy.password,
-                    udp: getClashUdpValue(proxy),
+                    ...getUdpField(proxy),
                     ...(proxy.plugin ? { plugin: proxy.plugin } : {}),
                     ...(proxy.plugin_opts ? { 'plugin-opts': normalizePluginOpts(proxy.plugin_opts) } : {})
                 };
@@ -213,7 +218,7 @@ export class ClashConfigBuilder extends BaseConfigBuilder {
                             host: proxy.transport.host
                         }
                         : undefined,
-                    udp: getClashUdpValue(proxy)
+                    ...getUdpField(proxy)
                 };
             case 'vless':
                 return {
@@ -240,7 +245,7 @@ export class ClashConfigBuilder extends BaseConfigBuilder {
                     } : undefined,
                     tfo: proxy.tcp_fast_open,
                     'skip-cert-verify': !!proxy.tls?.insecure,
-                    udp: getClashUdpValue(proxy),
+                    ...getUdpField(proxy),
                     ...(proxy.alpn ? { alpn: proxy.alpn } : {}),
                     ...(proxy.packet_encoding ? { 'packet-encoding': proxy.packet_encoding } : {}),
                     'flow': proxy.flow ?? undefined,
@@ -292,7 +297,7 @@ export class ClashConfigBuilder extends BaseConfigBuilder {
                     'skip-cert-verify': !!proxy.tls?.insecure,
                     ...(proxy.alpn ? { alpn: proxy.alpn } : {}),
                     'flow': proxy.flow ?? undefined,
-                    udp: getClashUdpValue(proxy),
+                    ...getUdpField(proxy),
                 };
             case 'tuic':
                 return {
@@ -319,7 +324,7 @@ export class ClashConfigBuilder extends BaseConfigBuilder {
                     server: proxy.server,
                     port: proxy.server_port,
                     password: proxy.password,
-                    udp: getClashUdpValue(proxy),
+                    ...getUdpField(proxy),
                     ...(proxy.tls?.utls?.fingerprint ? { 'client-fingerprint': proxy.tls.utls.fingerprint } : {}),
                     ...(proxy.tls?.server_name ? { sni: proxy.tls.server_name } : {}),
                     ...(proxy.tls?.insecure !== undefined ? { 'skip-cert-verify': !!proxy.tls.insecure } : {}),
