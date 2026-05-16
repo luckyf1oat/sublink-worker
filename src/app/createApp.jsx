@@ -641,10 +641,10 @@ export function createApp(bindings = {}) {
     app.get('/list', async (c) => {
         const authState = await getAdminAuthState(runtime.kv, c);
         if (!authState.initialized) {
-            return c.text('Admin password is not initialized. Please call /auth/setup first.', 403);
+            return c.html(renderAdminAuthPage({ initialized: false, next: '/list' }));
         }
         if (!authState.authenticated) {
-            return c.text('Unauthorized', 401);
+            return c.html(renderAdminAuthPage({ initialized: true, next: '/list' }));
         }
 
         const shortLinks = requireShortLinkService(services.shortLinks);
@@ -910,7 +910,7 @@ function buildSessionCookie(token) {
     return `admin_session=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=604800; SameSite=Lax`;
 }
 
-function renderAdminAuthPage({ initialized }) {
+function renderAdminAuthPage({ initialized, next = '/' }) {
     const action = initialized ? '/auth/login' : '/auth/setup';
     const title = initialized ? 'Admin Login' : 'Set Admin Password';
     const subtitle = initialized ? 'Please enter admin password to access panel.' : 'First visit detected. Please set admin password.';
@@ -951,7 +951,7 @@ function renderAdminAuthPage({ initialized }) {
         document.getElementById('msg').textContent = await res.text();
         return;
       }
-      location.href = '/';
+      location.href = '${next}';
     });
   </script>
 </body>

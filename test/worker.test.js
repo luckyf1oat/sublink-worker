@@ -164,10 +164,12 @@ proxy-groups:
         expect(text).toContain('Short code already exists');
     });
 
-    it('GET /list requires initialized password and admin auth', async () => {
+    it('GET /list first visit shows setup page, then allows login and list access', async () => {
         const app = createTestApp();
         const uninitialized = await app.request('http://localhost/list');
-        expect(uninitialized.status).toBe(403);
+        expect(uninitialized.status).toBe(200);
+        const setupPage = await uninitialized.text();
+        expect(setupPage).toContain('Set Admin Password');
 
         const setupRes = await app.request('http://localhost/auth/setup', {
             method: 'POST',
@@ -175,6 +177,11 @@ proxy-groups:
             body: JSON.stringify({ password: 'list-pass' })
         });
         const cookie = setupRes.headers.get('set-cookie');
+
+        const noCookie = await app.request('http://localhost/list');
+        expect(noCookie.status).toBe(200);
+        const loginPage = await noCookie.text();
+        expect(loginPage).toContain('Admin Login');
 
         await app.request('http://localhost/shorten-v2?url=http%3A%2F%2Flocalhost%2Fauto%3Fconfig%3Ddemo&shortCode=list001');
         const listRes = await app.request('http://localhost/list', {
