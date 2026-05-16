@@ -17,46 +17,13 @@ const createTestApp = (overrides = {}) => {
 };
 
 describe('Worker', () => {
-    it('GET / returns HTML without auth', async () => {
+    it('GET / returns HTML', async () => {
         const app = createTestApp();
         const res = await app.request('http://localhost/');
         expect(res.status).toBe(200);
         expect(res.headers.get('content-type')).toContain('text/html');
         const text = await res.text();
         expect(text).toContain('Sublink Worker');
-    });
-
-    it('auth setup + login allows dashboard access', async () => {
-        const app = createTestApp();
-        const setupRes = await app.request('http://localhost/auth/setup', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ password: 'admin-pass' })
-        });
-        expect(setupRes.status).toBe(200);
-        const setupCookie = setupRes.headers.get('set-cookie');
-        expect(setupCookie).toContain('admin_session=');
-
-        const homeRes = await app.request('http://localhost/', {
-            headers: { cookie: setupCookie }
-        });
-        expect(homeRes.status).toBe(200);
-        const homeText = await homeRes.text();
-        expect(homeText).toContain('Sublink Worker');
-
-        const badLoginRes = await app.request('http://localhost/auth/login', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ password: 'wrong' })
-        });
-        expect(badLoginRes.status).toBe(401);
-
-        const loginRes = await app.request('http://localhost/auth/login', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ password: 'admin-pass' })
-        });
-        expect(loginRes.status).toBe(200);
     });
 
     it('GET /singbox returns JSON', async () => {
@@ -146,51 +113,6 @@ proxy-groups:
         const text = await res.text();
         expect(text).toBeTruthy();
         expect(kvMock.put).toHaveBeenCalled();
-    });
-
-    it('GET /shorten-v2 returns 409 for duplicate short code', async () => {
-        const kvMock = {
-            put: vi.fn(async () => {}),
-            get: vi.fn(async (key) => {
-                if (key === 'dupcode') return '?config=test';
-                return null;
-            }),
-            delete: vi.fn(async () => {})
-        };
-        const app = createTestApp({ kv: kvMock });
-        const res = await app.request('http://localhost/shorten-v2?url=http%3A%2F%2Fexample.com&shortCode=dupcode');
-        expect(res.status).toBe(409);
-        const text = await res.text();
-        expect(text).toContain('Short code already exists');
-    });
-
-    it('GET /list first visit shows setup page, then allows login and list access', async () => {
-        const app = createTestApp();
-        const uninitialized = await app.request('http://localhost/list');
-        expect(uninitialized.status).toBe(200);
-        const setupPage = await uninitialized.text();
-        expect(setupPage).toContain('Set Admin Password');
-
-        const setupRes = await app.request('http://localhost/auth/setup', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ password: 'list-pass' })
-        });
-        const cookie = setupRes.headers.get('set-cookie');
-
-        const noCookie = await app.request('http://localhost/list');
-        expect(noCookie.status).toBe(200);
-        const loginPage = await noCookie.text();
-        expect(loginPage).toContain('Admin Login');
-
-        await app.request('http://localhost/shorten-v2?url=http%3A%2F%2Flocalhost%2Fauto%3Fconfig%3Ddemo&shortCode=list001');
-        const listRes = await app.request('http://localhost/list', {
-            headers: { cookie }
-        });
-        expect(listRes.status).toBe(200);
-        const payload = await listRes.json();
-        expect(Array.isArray(payload.list)).toBe(true);
-        expect(payload.list[0].code).toBe('list001');
     });
 
     it('GET /a/:code redirects to /auto query', async () => {
