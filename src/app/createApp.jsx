@@ -19,6 +19,8 @@ import { normalizeRuntime } from '../runtime/runtimeConfig.js';
 import { PREDEFINED_RULE_SETS, SING_BOX_CONFIG, SING_BOX_CONFIG_V1_11, generateSubconverterConfig } from '../config/index.js';
 
 const DEFAULT_USER_AGENT = 'curl/7.74.0';
+const ADMIN_PASSWORD_HASH_KEY = '__admin_password_hash__';
+const ADMIN_SESSION_TOKEN_KEY = '__admin_session_token__';
 
 export function createApp(bindings = {}) {
     const runtime = normalizeRuntime(bindings);
@@ -37,7 +39,7 @@ export function createApp(bindings = {}) {
         await next();
     });
 
-    app.get('/', (c) => {
+    app.get('/', async (c) => {
         const t = c.get('t');
         const lang = resolveLanguage(c.get('lang'));
         const subtitle = APP_SUBTITLE[lang] || APP_SUBTITLE['zh-CN'];
@@ -66,6 +68,65 @@ export function createApp(bindings = {}) {
                 </div>
             </Layout>
         );
+    });
+
+    app.get('/auth/status', async (c) => {
+        const state = await getAdminAuthState(runtime.kv, c);
+        return c.json(state);
+    });
+
+    app.post('/auth/setup', async (c) => {
+        if (!runtime.kv) {
+            throw new MissingDependencyError('Admin auth requires KV store');
+        }
+
+        const { password } = await c.req.json();
+        if (typeof password !== 'string') {
+            return c.text('Password is required', 400);
+        }
+
+        const existingHash = await runtime.kv.get(ADMIN_PASSWORD_HASH_KEY);
+        if (existingHash) {
+            return c.text('Admin password is already set', 409);
+        }
+
+        await runtime.kv.put(ADMIN_PASSWORD_HASH_KEY, await sha256Hex(password));
+        const token = await createAdminSession(runtime.kv);
+        c.header('Set-Cookie', buildSessionCookie(token));
+        return c.text('OK');
+    });
+
+    app.post('/auth/login', async (c) => {
+        if (!runtime.kv) {
+            throw new MissingDependencyError('Admin auth requires KV store');
+        }
+
+        const { password } = await c.req.json();
+        if (typeof password !== 'string') {
+            return c.text('Password is required', 400);
+        }
+
+        const storedHash = await runtime.kv.get(ADMIN_PASSWORD_HASH_KEY);
+        if (!storedHash) {
+            return c.text('Admin password is not initialized', 400);
+        }
+
+        const inputHash = await sha256Hex(password);
+        if (inputHash !== storedHash) {
+            return c.text('Invalid password', 401);
+        }
+
+        const token = await createAdminSession(runtime.kv);
+        c.header('Set-Cookie', buildSessionCookie(token));
+        return c.text('OK');
+    });
+
+    app.post('/auth/logout', async (c) => {
+        if (runtime.kv) {
+            await runtime.kv.delete(ADMIN_SESSION_TOKEN_KEY);
+        }
+        c.header('Set-Cookie', 'admin_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
+        return c.text('OK');
     });
 
     app.get('/singbox', async (c) => {
@@ -577,6 +638,20 @@ export function createApp(bindings = {}) {
         }
     });
 
+    app.get('/list', async (c) => {
+        const authState = await getAdminAuthState(runtime.kv, c);
+        if (!authState.initialized) {
+            return c.text('Admin password is not initialized. Please call /auth/setup first.', 403);
+        }
+        if (!authState.authenticated) {
+            return c.text('Unauthorized', 401);
+        }
+
+        const shortLinks = requireShortLinkService(services.shortLinks);
+        const list = await shortLinks.listShortLinks();
+        return c.json({ list });
+    });
+
     app.get('/favicon.ico', async (c) => {
         if (!runtime.assetFetcher) {
             return c.notFound();
@@ -778,4 +853,107 @@ function handleError(c, error, logger) {
     }
     logger.error?.('Unhandled error', error);
     return c.text(`Error: ${error.message}`, 500);
+}
+
+async function getAdminAuthState(kv, c) {
+    if (!kv) {
+        return { initialized: false, authenticated: true };
+    }
+
+    const storedHash = await kv.get(ADMIN_PASSWORD_HASH_KEY);
+    const initialized = Boolean(storedHash);
+    if (!initialized) {
+        return { initialized: false, authenticated: false };
+    }
+
+    const sessionToken = getCookieValue(c.req, 'admin_session');
+    if (!sessionToken) {
+        return { initialized: true, authenticated: false };
+    }
+
+    const storedSessionToken = await kv.get(ADMIN_SESSION_TOKEN_KEY);
+    return {
+        initialized: true,
+        authenticated: Boolean(storedSessionToken && sessionToken === storedSessionToken)
+    };
+}
+
+function getCookieValue(request, name) {
+    const cookieHeader = getRequestHeader(request, 'Cookie');
+    if (!cookieHeader) return null;
+    const pairs = cookieHeader.split(';');
+    for (const pair of pairs) {
+        const [rawKey, ...rawValue] = pair.split('=');
+        if (!rawKey) continue;
+        if (rawKey.trim() === name) {
+            return decodeURIComponent(rawValue.join('=').trim());
+        }
+    }
+    return null;
+}
+
+async function sha256Hex(value) {
+    const data = new TextEncoder().encode(value);
+    const digest = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(digest))
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('');
+}
+
+async function createAdminSession(kv) {
+    const token = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    await kv.put(ADMIN_SESSION_TOKEN_KEY, token);
+    return token;
+}
+
+function buildSessionCookie(token) {
+    return `admin_session=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=604800; SameSite=Lax`;
+}
+
+function renderAdminAuthPage({ initialized }) {
+    const action = initialized ? '/auth/login' : '/auth/setup';
+    const title = initialized ? 'Admin Login' : 'Set Admin Password';
+    const subtitle = initialized ? 'Please enter admin password to access panel.' : 'First visit detected. Please set admin password.';
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${title}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#0f172a; color:#e2e8f0; display:flex; min-height:100vh; align-items:center; justify-content:center; margin:0; }
+    .card { width: 92%; max-width: 420px; background:#111827; border:1px solid #334155; border-radius:12px; padding:24px; }
+    input,button { width:100%; box-sizing:border-box; padding:12px; border-radius:8px; border:1px solid #334155; margin-top:12px; }
+    input { background:#0b1220; color:#e2e8f0; }
+    button { background:#2563eb; color:white; cursor:pointer; }
+    p { color:#94a3b8; margin:0 0 8px 0; }
+    #msg { margin-top: 10px; color: #fca5a5; min-height: 20px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>${title}</h2>
+    <p>${subtitle}</p>
+    <input id="password" type="password" placeholder="Password" />
+    <button id="submit">Submit</button>
+    <div id="msg"></div>
+  </div>
+  <script>
+    document.getElementById('submit').addEventListener('click', async () => {
+      const password = document.getElementById('password').value;
+      const res = await fetch('${action}', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      if (!res.ok) {
+        document.getElementById('msg').textContent = await res.text();
+        return;
+      }
+      location.href = '/';
+    });
+  </script>
+</body>
+</html>`;
 }
