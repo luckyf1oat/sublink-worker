@@ -85,6 +85,28 @@ describe('GET /auto', () => {
         expect(res.headers.get('content-type')).toContain('application/json');
     });
 
+    it('detects hiddify as singbox and returns JSON config', async () => {
+        const app = createTestApp();
+        const res = await app.request(`http://localhost/auto?config=${encodeURIComponent(VMESS_SAMPLE)}`, {
+            headers: { 'User-Agent': 'HiddifyNext/2.0.5 (sing-box 1.12.2)' }
+        });
+
+        expect(res.status).toBe(200);
+        expect(res.headers.get('x-sublink-detected-client')).toBe('singbox');
+        expect(res.headers.get('content-type')).toContain('application/json');
+    });
+
+    it('detects shadowrocket as clash-compatible YAML output', async () => {
+        const app = createTestApp();
+        const res = await app.request(`http://localhost/auto?config=${encodeURIComponent(VMESS_SAMPLE)}`, {
+            headers: { 'User-Agent': 'Shadowrocket/2.2.35' }
+        });
+
+        expect(res.status).toBe(200);
+        expect(res.headers.get('x-sublink-detected-client')).toBe('clash');
+        expect(res.headers.get('content-type')).toContain('text/yaml');
+    });
+
     it('falls back to clash when user-agent is unknown', async () => {
         const app = createTestApp();
         const res = await app.request(`http://localhost/auto?config=${encodeURIComponent(VMESS_SAMPLE)}`, {

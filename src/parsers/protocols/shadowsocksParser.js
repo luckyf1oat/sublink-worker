@@ -23,6 +23,20 @@ function parsePluginString(pluginStr) {
     if (!pluginName) return null;
 
     const opts = {};
+    const normalizeBoolLike = (value) => {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'number') {
+            if (value === 0) return false;
+            if (value === 1) return true;
+            return value;
+        }
+        if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase();
+            if (normalized === '0' || normalized === 'false' || normalized === 'no') return false;
+            if (normalized === '1' || normalized === 'true' || normalized === 'yes') return true;
+        }
+        return value;
+    };
     for (let i = 1; i < parts.length; i++) {
         const eqIndex = parts[i].indexOf('=');
         if (eqIndex === -1) {
@@ -50,6 +64,12 @@ function parsePluginString(pluginStr) {
             }
         }
     }
+
+    ['mux', 'tls'].forEach((key) => {
+        if (typeof opts[key] !== 'undefined') {
+            opts[key] = normalizeBoolLike(opts[key]);
+        }
+    });
 
     // Normalize plugin name: simple-obfs -> obfs (Clash uses 'obfs')
     const normalizedPlugin = pluginName === 'simple-obfs' ? 'obfs' : pluginName;

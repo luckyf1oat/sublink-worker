@@ -691,7 +691,10 @@ function detectSubscriptionClient(userAgent) {
         ua.includes('sfi/') ||
         ua.includes('karing') ||
         ua.includes('hiddify') ||
-        ua.includes('nekoray')
+        ua.includes('nekoray') ||
+        ua.includes('nekobox') ||
+        ua.includes('foxray') ||
+        ua.includes('v2box')
     ) {
         return 'singbox';
     }
@@ -702,7 +705,9 @@ function detectSubscriptionClient(userAgent) {
         ua.includes('meta') ||
         ua.includes('clash-verge') ||
         ua.includes('clashx') ||
-        ua.includes('stash')
+        ua.includes('stash') ||
+        ua.includes('loon') ||
+        ua.includes('shadowrocket')
     ) {
         return 'clash';
     }
