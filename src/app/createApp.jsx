@@ -531,25 +531,25 @@ export function createApp(bindings = {}) {
         }
     });
 
-    const redirectHandler = (prefix) => async (c) => {
+    const shortCodeHandler = (type) => async (c) => {
         try {
             const code = c.req.param('code');
             const shortLinks = requireShortLinkService(services.shortLinks);
             const originalParam = await shortLinks.resolveShortCode(code);
             if (!originalParam) return c.text('Short URL not found', 404);
 
-            const url = new URL(c.req.url);
-            return c.redirect(`${url.origin}/${prefix}${originalParam}`);
+            const params = new URLSearchParams(originalParam.startsWith('?') ? originalParam.slice(1) : originalParam);
+            return renderSubscriptionByType(c, type, params, services, runtime);
         } catch (error) {
             return handleError(c, error, runtime.logger);
         }
     };
 
-    app.get('/s/:code', redirectHandler('surge'));
-    app.get('/b/:code', redirectHandler('singbox'));
-    app.get('/c/:code', redirectHandler('clash'));
-    app.get('/x/:code', redirectHandler('xray'));
-    app.get('/a/:code', redirectHandler('auto'));
+    app.get('/s/:code', shortCodeHandler('surge'));
+    app.get('/b/:code', shortCodeHandler('singbox'));
+    app.get('/c/:code', shortCodeHandler('clash'));
+    app.get('/x/:code', shortCodeHandler('xray'));
+    app.get('/a/:code', shortCodeHandler('auto'));
 
     app.post('/config', async (c) => {
         try {
@@ -654,6 +654,148 @@ function normalizeQueryString(queryString) {
         return null;
     }
     return trimmed.startsWith('?') ? trimmed : `?${trimmed}`;
+}
+
+async function renderSubscriptionByType(c, type, params, services, runtime) {
+    const req = {
+        query: (name) => params.get(name) ?? undefined,
+        header: (name) => c.req.header(name),
+        raw: c.req.raw,
+        url: c.req.url
+    };
+
+    if (type === 'singbox') {
+        const config = req.query('config');
+        if (!config) return c.text('Missing config parameter', 400);
+        const selectedRules = parseSelectedRules(req.query('selectedRules'));
+        const customRules = parseJsonArray(req.query('customRules'));
+        const ua = req.query('ua') || getRequestHeader(req, 'User-Agent') || DEFAULT_USER_AGENT;
+        const groupByCountry = parseBooleanFlag(req.query('group_by_country'));
+        const includeAutoSelect = req.query('include_auto_select') !== 'false';
+        const enableClashUI = parseBooleanFlag(req.query('enable_clash_ui'));
+        const externalController = req.query('external_controller');
+        const externalUiDownloadUrl = req.query('external_ui_download_url');
+        const configId = req.query('configId');
+        const lang = c.get('lang');
+        const requestedSingboxVersion = req.query('singbox_version') || req.query('sb_version') || req.query('sb_ver');
+        const requestUserAgent = getRequestHeader(req, 'User-Agent');
+        const singboxConfigVersion = resolveSingboxConfigVersion(requestedSingboxVersion, requestUserAgent);
+        let baseConfig = singboxConfigVersion === '1.11' ? SING_BOX_CONFIG_V1_11 : SING_BOX_CONFIG;
+        if (configId) {
+            const storage = requireConfigStorage(services.configStorage);
+            const storedConfig = await storage.getConfigById(configId);
+            if (storedConfig) baseConfig = storedConfig;
+        }
+        const builder = new SingboxConfigBuilder(
+            config, selectedRules, customRules, baseConfig, lang, ua, groupByCountry,
+            enableClashUI, externalController, externalUiDownloadUrl, singboxConfigVersion, includeAutoSelect
+        );
+        await builder.build();
+        const userinfo = builder.getSubscriptionUserinfo();
+        if (userinfo) c.header('subscription-userinfo', userinfo);
+        return c.json(builder.config);
+    }
+
+    if (type === 'clash') {
+        const config = req.query('config');
+        if (!config) return c.text('Missing config parameter', 400);
+        const selectedRules = parseSelectedRules(req.query('selectedRules'));
+        const customRules = parseJsonArray(req.query('customRules'));
+        const ua = req.query('ua') || getRequestHeader(req, 'User-Agent') || DEFAULT_USER_AGENT;
+        const groupByCountry = parseBooleanFlag(req.query('group_by_country'));
+        const includeAutoSelect = req.query('include_auto_select') !== 'false';
+        const enableClashUI = parseBooleanFlag(req.query('enable_clash_ui'));
+        const externalController = req.query('external_controller');
+        const externalUiDownloadUrl = req.query('external_ui_download_url');
+        const configId = req.query('configId');
+        const lang = c.get('lang');
+        let baseConfig;
+        if (configId) {
+            const storage = requireConfigStorage(services.configStorage);
+            baseConfig = await storage.getConfigById(configId);
+        }
+        const builder = new ClashConfigBuilder(
+            config, selectedRules, customRules, baseConfig, lang, ua, groupByCountry,
+            enableClashUI, externalController, externalUiDownloadUrl, includeAutoSelect
+        );
+        await builder.build();
+        const userinfo = builder.getSubscriptionUserinfo();
+        const headers = { 'Content-Type': 'text/yaml; charset=utf-8' };
+        if (userinfo) headers['subscription-userinfo'] = userinfo;
+        return c.text(builder.formatConfig(), 200, headers);
+    }
+
+    if (type === 'surge') {
+        const config = req.query('config');
+        if (!config) return c.text('Missing config parameter', 400);
+        const selectedRules = parseSelectedRules(req.query('selectedRules'));
+        const customRules = parseJsonArray(req.query('customRules'));
+        const ua = req.query('ua') || getRequestHeader(req, 'User-Agent') || DEFAULT_USER_AGENT;
+        const groupByCountry = parseBooleanFlag(req.query('group_by_country'));
+        const includeAutoSelect = req.query('include_auto_select') !== 'false';
+        const configId = req.query('configId');
+        const lang = c.get('lang');
+        let baseConfig;
+        if (configId) {
+            const storage = requireConfigStorage(services.configStorage);
+            baseConfig = await storage.getConfigById(configId);
+        }
+        const builder = new SurgeConfigBuilder(
+            config, selectedRules, customRules, baseConfig, lang, ua, groupByCountry, includeAutoSelect
+        );
+        builder.setSubscriptionUrl(c.req.url);
+        await builder.build();
+        const userinfo = builder.getSubscriptionUserinfo();
+        if (userinfo) c.header('subscription-userinfo', userinfo);
+        return c.text(builder.formatConfig());
+    }
+
+    if (type === 'xray') {
+        const inputString = req.query('config');
+        if (!inputString) return c.text('Missing config parameter', 400);
+        const proxylist = inputString.split('\n');
+        const finalProxyList = [];
+        let subscriptionUserinfo;
+        const userAgent = req.query('ua') || getRequestHeader(req, 'User-Agent') || DEFAULT_USER_AGENT;
+        const headers = { 'User-Agent': userAgent };
+        for (const proxy of proxylist) {
+            const trimmedProxy = proxy.trim();
+            if (!trimmedProxy) continue;
+            if (trimmedProxy.startsWith('http://') || trimmedProxy.startsWith('https://')) {
+                try {
+                    const response = await fetch(trimmedProxy, { method: 'GET', headers });
+                    const fetchedUserinfo = response.headers.get('subscription-userinfo');
+                    if (fetchedUserinfo && subscriptionUserinfo === undefined) subscriptionUserinfo = fetchedUserinfo;
+                    const text = await response.text();
+                    let processed = tryDecodeSubscriptionLines(text, { decodeUriComponent: true });
+                    if (!Array.isArray(processed)) processed = [processed];
+                    finalProxyList.push(...processed.filter(item => typeof item === 'string' && item.trim() !== ''));
+                } catch (e) {
+                    runtime.logger.warn('Failed to fetch the proxy', e);
+                }
+            } else {
+                let processed = tryDecodeSubscriptionLines(trimmedProxy);
+                if (!Array.isArray(processed)) processed = [processed];
+                finalProxyList.push(...processed.filter(item => typeof item === 'string' && item.trim() !== ''));
+            }
+        }
+        const finalString = finalProxyList.join('\n');
+        if (!finalString) return c.text('Missing config parameter', 400);
+        const responseHeaders = {};
+        if (subscriptionUserinfo) responseHeaders['subscription-userinfo'] = subscriptionUserinfo;
+        return c.text(encodeBase64(finalString), 200, responseHeaders);
+    }
+
+    if (type === 'auto') {
+        const userAgent = req.query('ua') || getRequestHeader(req, 'User-Agent') || DEFAULT_USER_AGENT;
+        const detectedClient = detectSubscriptionClient(userAgent);
+        if (detectedClient === 'singbox') return renderSubscriptionByType(c, 'singbox', params, services, runtime);
+        if (detectedClient === 'surge') return renderSubscriptionByType(c, 'surge', params, services, runtime);
+        if (detectedClient === 'xray') return renderSubscriptionByType(c, 'xray', params, services, runtime);
+        return renderSubscriptionByType(c, 'clash', params, services, runtime);
+    }
+
+    return c.text('Unsupported type', 400);
 }
 
 function parseSemverLike(value) {

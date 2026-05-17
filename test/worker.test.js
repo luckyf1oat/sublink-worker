@@ -143,22 +143,25 @@ proxy-groups:
         );
     });
 
-    it('GET /a/:code redirects to /auto query', async () => {
+    it('GET /a/:code returns converted result directly without redirect', async () => {
+        const validVmess = 'vmess://ew0KICAidiI6ICIyIiwNCiAgInBzIjogInRlc3QiLA0KICAiYWRkIjogIjEuMS4xLjEiLA0KICAicG9ydCI6ICI0NDMiLA0KICAiaWQiOiAiYWRkNjY2NjYtODg4OC04ODg4LTg4ODgtODg4ODg4ODg4ODg4IiwNCiAgImFpZCI6ICIwIiwNCiAgInNjeSI6ICJhdXRvIiwNCiAgIm5ldCI6ICJ3cyIsDQogICJ0eXBlIjogIm5vbmUiLA0KICAiaG9zdCI6ICIiLA0KICAicGF0aCI6ICIvIiwNCiAgInRscyI6ICJ0bHMiDQp9';
         const kvMock = {
             put: vi.fn(async () => {}),
             get: vi.fn(async (key) => {
                 if (key === 'abc123') {
-                    return '?config=vmess%3A%2F%2Ftest';
+                    return `?config=${encodeURIComponent(validVmess)}&ua=clash-meta`;
                 }
                 return null;
             }),
             delete: vi.fn(async () => {})
         };
         const app = createTestApp({ kv: kvMock });
-        const res = await app.request('http://localhost/a/abc123', { redirect: 'manual' });
+        const res = await app.request('http://localhost/a/abc123');
 
-        expect(res.status).toBe(302);
-        expect(res.headers.get('location')).toBe('http://localhost/auto?config=vmess%3A%2F%2Ftest');
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-type')).toContain('text/yaml');
+        const text = await res.text();
+        expect(text).toContain('proxies:');
     });
 
     it('GET /resolve resolves /a/:code to /auto URL', async () => {
