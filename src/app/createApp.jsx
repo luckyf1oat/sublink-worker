@@ -512,6 +512,25 @@ export function createApp(bindings = {}) {
         }
     });
 
+    app.post('/shorten-v2', async (c) => {
+        try {
+            const payload = await c.req.json();
+            const queryString = normalizeQueryString(payload?.queryString);
+            if (!queryString) {
+                return c.text('Missing queryString parameter', 400);
+            }
+
+            const shortLinks = requireShortLinkService(services.shortLinks);
+            const code = await shortLinks.createShortLink(queryString, payload?.shortCode);
+            return c.text(code);
+        } catch (error) {
+            if (error instanceof SyntaxError) {
+                return c.text('Invalid JSON payload', 400);
+            }
+            return handleError(c, error, runtime.logger);
+        }
+    });
+
     const redirectHandler = (prefix) => async (c) => {
         try {
             const code = c.req.param('code');
@@ -624,6 +643,17 @@ function parseJsonArray(raw) {
 
 function parseBooleanFlag(value) {
     return value === 'true' || value === true;
+}
+
+function normalizeQueryString(queryString) {
+    if (typeof queryString !== 'string') {
+        return null;
+    }
+    const trimmed = queryString.trim();
+    if (!trimmed) {
+        return null;
+    }
+    return trimmed.startsWith('?') ? trimmed : `?${trimmed}`;
 }
 
 function parseSemverLike(value) {

@@ -115,6 +115,34 @@ proxy-groups:
         expect(kvMock.put).toHaveBeenCalled();
     });
 
+    it('POST /shorten-v2 stores query in KV and returns 8-char code', async () => {
+        const kvMock = {
+            put: vi.fn(async () => {}),
+            get: vi.fn(async () => null),
+            delete: vi.fn(async () => {})
+        };
+        const app = createTestApp({ kv: kvMock });
+
+        const res = await app.request('http://localhost/shorten-v2', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                queryString: 'config=vmess%3A%2F%2Fdemo&ua=test-agent'
+            })
+        });
+
+        expect(res.status).toBe(200);
+        const code = await res.text();
+        expect(code).toMatch(/^[A-Za-z0-9]{8}$/);
+        expect(kvMock.put).toHaveBeenCalledWith(
+            code,
+            '?config=vmess%3A%2F%2Fdemo&ua=test-agent',
+            undefined
+        );
+    });
+
     it('GET /a/:code redirects to /auto query', async () => {
         const kvMock = {
             put: vi.fn(async () => {}),

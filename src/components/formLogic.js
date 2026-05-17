@@ -393,13 +393,33 @@ export const formLogicFn = (t) => {
 
                     const queryString = params.toString();
 
-                    this.generatedLinks = {
-                        auto: origin + '/auto?' + queryString,
-                        xray: origin + '/xray?' + queryString,
-                        singbox: origin + '/singbox?' + queryString,
-                        clash: origin + '/clash?' + queryString,
-                        surge: origin + '/surge?' + queryString
+                    const response = await fetch('/shorten-v2', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            queryString,
+                            shortCode: this.customShortCode.trim() || undefined
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to create short subscription links');
+                    }
+
+                    const shortCode = await response.text();
+                    const prefixMap = {
+                        auto: 'a',
+                        xray: 'x',
+                        singbox: 'b',
+                        clash: 'c',
+                        surge: 's'
                     };
+
+                    this.generatedLinks = Object.fromEntries(
+                        Object.entries(prefixMap).map(([type, prefix]) => [type, `${origin}/${prefix}/${shortCode}`])
+                    );
 
                     // Scroll to results
                     setTimeout(() => {
@@ -425,6 +445,13 @@ export const formLogicFn = (t) => {
                 }
 
                 if (!this.generatedLinks) {
+                    return;
+                }
+
+                const shortLinkPattern = /^https?:\/\/[^/]+\/[abcxs]\/[a-zA-Z0-9_-]+$/;
+                const links = Object.values(this.generatedLinks);
+                if (links.length > 0 && links.every(link => shortLinkPattern.test(link))) {
+                    alert(window.APP_TRANSLATIONS.alreadyShortened);
                     return;
                 }
 
