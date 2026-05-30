@@ -321,53 +321,6 @@ export function createApp(bindings = {}) {
             const detectedClient = detectSubscriptionClient(userAgent);
             const lang = c.get('lang');
 
-            if (detectedClient === 'singbox') {
-                const selectedRules = parseSelectedRules(c.req.query('selectedRules'));
-                const customRules = parseJsonArray(c.req.query('customRules'));
-                const groupByCountry = parseBooleanFlag(c.req.query('group_by_country'));
-                const includeAutoSelect = c.req.query('include_auto_select') !== 'false';
-                const enableClashUI = parseBooleanFlag(c.req.query('enable_clash_ui'));
-                const externalController = c.req.query('external_controller');
-                const externalUiDownloadUrl = c.req.query('external_ui_download_url');
-                const configId = c.req.query('configId');
-
-                const requestedSingboxVersion = c.req.query('singbox_version') || c.req.query('sb_version') || c.req.query('sb_ver');
-                const requestUserAgent = getRequestHeader(c.req, 'User-Agent');
-                const singboxConfigVersion = resolveSingboxConfigVersion(requestedSingboxVersion, requestUserAgent);
-
-                let baseConfig = singboxConfigVersion === '1.11' ? SING_BOX_CONFIG_V1_11 : SING_BOX_CONFIG;
-                if (configId) {
-                    const storage = requireConfigStorage(services.configStorage);
-                    const storedConfig = await storage.getConfigById(configId);
-                    if (storedConfig) {
-                        baseConfig = storedConfig;
-                    }
-                }
-
-                const builder = new SingboxConfigBuilder(
-                    config,
-                    selectedRules,
-                    customRules,
-                    baseConfig,
-                    lang,
-                    userAgent,
-                    groupByCountry,
-                    enableClashUI,
-                    externalController,
-                    externalUiDownloadUrl,
-                    singboxConfigVersion,
-                    includeAutoSelect
-                );
-                await builder.build();
-                const userinfo = builder.getSubscriptionUserinfo();
-                if (userinfo) {
-                    c.header('subscription-userinfo', userinfo);
-                }
-                c.header('X-SubLink-Detected-Client', detectedClient);
-                c.header('Vary', 'User-Agent');
-                return c.json(builder.config);
-            }
-
             if (detectedClient === 'surge') {
                 const selectedRules = parseSelectedRules(c.req.query('selectedRules'));
                 const customRules = parseJsonArray(c.req.query('customRules'));
@@ -789,7 +742,6 @@ async function renderSubscriptionByType(c, type, params, services, runtime) {
     if (type === 'auto') {
         const userAgent = req.query('ua') || getRequestHeader(req, 'User-Agent') || DEFAULT_USER_AGENT;
         const detectedClient = detectSubscriptionClient(userAgent);
-        if (detectedClient === 'singbox') return renderSubscriptionByType(c, 'singbox', params, services, runtime);
         if (detectedClient === 'surge') return renderSubscriptionByType(c, 'surge', params, services, runtime);
         if (detectedClient === 'xray') return renderSubscriptionByType(c, 'xray', params, services, runtime);
         return renderSubscriptionByType(c, 'clash', params, services, runtime);
@@ -854,21 +806,6 @@ function detectSubscriptionClient(userAgent) {
     const ua = typeof userAgent === 'string' ? userAgent.toLowerCase() : '';
     if (!ua) {
         return 'clash';
-    }
-
-    if (
-        ua.includes('sing-box') ||
-        ua.includes('singbox') ||
-        ua.includes('sfa/') ||
-        ua.includes('sfi/') ||
-        ua.includes('karing') ||
-        ua.includes('hiddify') ||
-        ua.includes('nekoray') ||
-        ua.includes('nekobox') ||
-        ua.includes('foxray') ||
-        ua.includes('v2box')
-    ) {
-        return 'singbox';
     }
 
     if (
