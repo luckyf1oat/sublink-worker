@@ -393,32 +393,17 @@ export const formLogicFn = (t) => {
 
                     const queryString = params.toString();
 
-                    const response = await fetch('/shorten-v2', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            queryString,
-                            shortCode: this.customShortCode.trim() || undefined
-                        })
-                    });
-
-                    if (!response.ok) {
-                        throw new Error('Failed to create short subscription links');
-                    }
-
-                    const shortCode = await response.text();
-                    const prefixMap = {
-                        auto: 'a',
-                        xray: 'x',
-                        singbox: 'b',
-                        clash: 'c',
-                        surge: 's'
+                    // Build full subscription URLs directly (not short links — shortening is a separate step)
+                    const endpointMap = {
+                        auto: 'auto',
+                        xray: 'xray',
+                        singbox: 'singbox',
+                        clash: 'clash',
+                        surge: 'surge'
                     };
 
                     this.generatedLinks = Object.fromEntries(
-                        Object.entries(prefixMap).map(([type, prefix]) => [type, `${origin}/${prefix}/${shortCode}`])
+                        Object.entries(endpointMap).map(([type, endpoint]) => [type, `${origin}/${endpoint}?${queryString}`])
                     );
 
                     // Scroll to results
