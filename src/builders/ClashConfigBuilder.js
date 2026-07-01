@@ -317,6 +317,17 @@ export class ClashConfigBuilder extends BaseConfigBuilder {
                     ...(proxy.reduce_rtt !== undefined ? { 'reduce-rtt': proxy.reduce_rtt } : {}),
                     ...(proxy.fast_open !== undefined ? { 'fast-open': proxy.fast_open } : {}),
                 };
+            case 'socks':
+                return {
+                    name: proxy.tag,
+                    type: 'socks5',
+                    server: proxy.server,
+                    port: proxy.server_port,
+                    username: proxy.username,
+                    password: proxy.password,
+                    ...(proxy.version ? { version: proxy.version } : {}),
+                    ...getUdpField(proxy)
+                };
             case 'anytls':
                 return {
                     name: proxy.tag,
