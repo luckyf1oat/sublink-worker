@@ -274,16 +274,27 @@ export function parseUrlParams(url) {
 	const [addressPart, ...remainingParts] = rest.split('?');
 	const paramsPart = remainingParts.join('?');
 
+	// Extract #fragment from query part (after ?)
 	const [paramsOnly, ...fragmentParts] = paramsPart.split('#');
 	const searchParams = new URLSearchParams(paramsOnly);
 	const params = Object.fromEntries(searchParams.entries());
 
 	let name = fragmentParts.length > 0 ? fragmentParts.join('#') : '';
+
+	// Also extract #fragment from addressPart when there's no ?query
+	// e.g. socks://auth@host:port#MyNode → parseUrlParams loses the fragment
+	let cleanedAddressPart = addressPart;
+	if (!name && addressPart.includes('#')) {
+		const hashIndex = addressPart.indexOf('#');
+		cleanedAddressPart = addressPart.slice(0, hashIndex);
+		name = addressPart.slice(hashIndex + 1);
+	}
+
 	try {
 		name = decodeURIComponent(name);
 	} catch (error) { };
 
-	return { addressPart, params, name };
+	return { addressPart: cleanedAddressPart, params, name };
 }
 
 export function createTlsConfig(params) {
