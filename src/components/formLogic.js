@@ -449,18 +449,32 @@ export const formLogicFn = (t) => {
                     let shortCode = this.customShortCode.trim();
                     let isFirstRequest = true;
 
-                    // Shorten each link type
-                    for (const [type, url] of Object.entries(this.generatedLinks)) {
-                        try {
-                            let apiUrl = `${origin}/shorten-v2?url=${encodeURIComponent(url)}`;
+                    // Extract queryString once from generated links (all share the same query params)
+                    const firstUrlObj = new URL(Object.values(this.generatedLinks)[0]);
+                    const commonQueryString = firstUrlObj.search || '';
 
-                            // For the first request, either use custom code or let backend generate
-                            // For subsequent requests, use the code from first request
+                    // Map types to their corresponding path prefixes
+                    const prefixMap = {
+                        auto: 'a',
+                        xray: 'x',
+                        singbox: 'b',
+                        clash: 'c',
+                        surge: 's'
+                    };
+
+                    // Shorten each link type
+                    for (const [type] of Object.entries(this.generatedLinks)) {
+                        try {
+                            const body = { queryString: commonQueryString };
                             if (shortCode) {
-                                apiUrl += `&shortCode=${encodeURIComponent(shortCode)}`;
+                                body.shortCode = shortCode;
                             }
 
-                            const response = await fetch(apiUrl);
+                            const response = await fetch(`${origin}/shorten-v2`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(body)
+                            });
                             if (!response.ok) {
                                 throw new Error(`Failed to shorten ${type} link`);
                             }
@@ -472,15 +486,6 @@ export const formLogicFn = (t) => {
                                 shortCode = returnedCode;
                             }
                             isFirstRequest = false;
-
-                            // Map types to their corresponding path prefixes
-                            const prefixMap = {
-                                auto: 'a',
-                                xray: 'x',
-                                singbox: 'b',
-                                clash: 'c',
-                                surge: 's'
-                            };
 
                             shortened[type] = `${origin}/${prefixMap[type]}/${returnedCode}`;
                         } catch (error) {
